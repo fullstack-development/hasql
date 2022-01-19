@@ -26,6 +26,22 @@ instance MonadError QueryError Session where
   catchError = Catch.catch
 
 -- |
+-- Typeclass for monads that support executing PSQL statements
+class (Monad m, MonadError QueryError m, Catch.MonadMask m) => MonadSession m where
+    -- |
+    -- Possibly a multi-statement query,
+    -- which however cannot be parameterized or prepared,
+    -- nor can any results of it be collected.
+    sql :: ByteString -> m ()
+    -- |
+    -- Parameters and a specification of a parametric single-statement query to apply them to.
+    statement :: params -> Statement.Statement params result -> m result
+
+instance MonadSession Session where
+    sql = sessionSql
+    statement = sessionStatement
+
+-- |
 -- Smart constructor of the Session object
 session :: (Connection.Connection -> IO (Either QueryError a)) -> Session a
 session inner =
@@ -38,12 +54,8 @@ run :: Session a -> Connection.Connection -> IO (Either QueryError a)
 run (Session impl) connection =
   Catch.try $ runReaderT impl connection
 
--- |
--- Possibly a multi-statement query,
--- which however cannot be parameterized or prepared,
--- nor can any results of it be collected.
-sql :: ByteString -> Session ()
-sql sql =
+sessionSql :: ByteString -> Session ()
+sessionSql sql =
   session $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
     fmap (mapLeft (QueryError sql [])) $ withMVar pqConnectionRef $ \pqConnection -> do
       r1 <- IO.sendNonparametricStatement pqConnection sql
@@ -53,10 +65,8 @@ sql sql =
     decoder =
       Decoders.Results.single Decoders.Result.noResult
 
--- |
--- Parameters and a specification of a parametric single-statement query to apply them to.
-statement :: params -> Statement.Statement params result -> Session result
-statement input (Statement.Statement template (Encoders.Params paramsEncoder) decoder preparable) =
+sessionStatement :: params -> Statement.Statement params result -> Session result
+sessionStatement input (Statement.Statement template (Encoders.Params paramsEncoder) decoder preparable) =
   session $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
     fmap (mapLeft (QueryError template inputReps)) $ withMVar pqConnectionRef $ \pqConnection -> do
       r1 <- IO.sendParametricStatement pqConnection integerDatetimes registry template paramsEncoder preparable input

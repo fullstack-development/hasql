@@ -1,8 +1,7 @@
 module Hasql.Session
 (
   Session,
-  sql,
-  statement,
+  MonadSession (..),
   -- * Execution
   run,
   -- * Errors

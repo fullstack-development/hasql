@@ -2,6 +2,7 @@
 
 - Add `exceptions` instances (`MonadThrow`, `MonadCatch`, `MonadMask`) to the
   `Session` monad.
+- Introduce `MonadSession` typeclass with the `sql` and `statement` functions.
 
 # 1.5
 
