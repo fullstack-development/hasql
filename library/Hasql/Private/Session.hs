@@ -3,6 +3,7 @@ where
 
 import Hasql.Private.Prelude
 import Hasql.Private.Errors
+import qualified Control.Monad.Catch as Catch
 import qualified Database.PostgreSQL.LibPQ as LibPQ
 import qualified Hasql.Private.Decoders.Results as Decoders.Results
 import qualified Hasql.Private.Decoders.Result as Decoders.Result
@@ -17,15 +18,25 @@ import qualified Hasql.Private.Connection as Connection
 -- |
 -- A batch of actions to be executed in the context of a database connection.
 newtype Session a =
-  Session (ReaderT Connection.Connection (ExceptT QueryError IO) a)
-  deriving (Functor, Applicative, Monad, MonadError QueryError, MonadIO, MonadReader Connection.Connection)
+  Session (ReaderT Connection.Connection IO a)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Connection.Connection, Catch.MonadThrow, Catch.MonadCatch, Catch.MonadMask)
+
+instance MonadError QueryError Session where
+  throwError = Catch.throwM
+  catchError = Catch.catch
+
+-- |
+-- Smart constructor of the Session object
+session :: (Connection.Connection -> IO (Either QueryError a)) -> Session a
+session inner =
+  Session $ ReaderT $ \conn ->
+    inner conn >>= either Catch.throwM pure
 
 -- |
 -- Executes a bunch of commands on the provided connection.
 run :: Session a -> Connection.Connection -> IO (Either QueryError a)
 run (Session impl) connection =
-  runExceptT $
-  runReaderT impl connection
+  Catch.try $ runReaderT impl connection
 
 -- |
 -- Possibly a multi-statement query,
@@ -33,8 +44,8 @@ run (Session impl) connection =
 -- nor can any results of it be collected.
 sql :: ByteString -> Session ()
 sql sql =
-  Session $ ReaderT $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
-    ExceptT $ fmap (mapLeft (QueryError sql [])) $ withMVar pqConnectionRef $ \pqConnection -> do
+  session $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
+    fmap (mapLeft (QueryError sql [])) $ withMVar pqConnectionRef $ \pqConnection -> do
       r1 <- IO.sendNonparametricStatement pqConnection sql
       r2 <- IO.getResults pqConnection integerDatetimes decoder
       return $ r1 *> r2
@@ -46,8 +57,8 @@ sql sql =
 -- Parameters and a specification of a parametric single-statement query to apply them to.
 statement :: params -> Statement.Statement params result -> Session result
 statement input (Statement.Statement template (Encoders.Params paramsEncoder) decoder preparable) =
-  Session $ ReaderT $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
-    ExceptT $ fmap (mapLeft (QueryError template inputReps)) $ withMVar pqConnectionRef $ \pqConnection -> do
+  session $ \(Connection.Connection pqConnectionRef integerDatetimes registry) ->
+    fmap (mapLeft (QueryError template inputReps)) $ withMVar pqConnectionRef $ \pqConnection -> do
       r1 <- IO.sendParametricStatement pqConnection integerDatetimes registry template paramsEncoder preparable input
       r2 <- IO.getResults pqConnection integerDatetimes (unsafeCoerce decoder)
       return $ r1 *> r2

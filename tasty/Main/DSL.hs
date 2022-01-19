@@ -36,9 +36,9 @@ session session =
           where
             host = "localhost"
             port = 5432
-            user = "postgres"
-            password = ""
-            database = "postgres"
+            user = "hasql_test"
+            password = "hasql_test"
+            database = "hasql_test"
     use connection =
       ExceptT $
       fmap (mapLeft SessionError) $
