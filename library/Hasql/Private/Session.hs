@@ -27,19 +27,39 @@ instance MonadError QueryError Session where
 
 -- |
 -- Typeclass for monads that support executing PSQL statements
-class (Monad m, MonadError QueryError m, Catch.MonadMask m) => MonadSession m where
-    -- |
-    -- Possibly a multi-statement query,
-    -- which however cannot be parameterized or prepared,
-    -- nor can any results of it be collected.
-    sql :: ByteString -> m ()
-    -- |
-    -- Parameters and a specification of a parametric single-statement query to apply them to.
-    statement :: params -> Statement.Statement params result -> m result
+class (Monad m, Catch.MonadMask m) => MonadSession m where
+  -- |
+  -- Possibly a multi-statement query,
+  -- which however cannot be parameterized or prepared,
+  -- nor can any results of it be collected.
+  sql :: ByteString -> m ()
+  -- |
+  -- Parameters and a specification of a parametric single-statement query to apply them to.
+  statement :: params -> Statement.Statement params result -> m result
+  -- |
+  -- Throw a QueryError in the monad
+  throwQueryError :: QueryError -> m x
+  throwQueryError = Catch.throwM
+  -- |
+  -- Catch and handle a QueryError
+  catchQueryError :: m a -> (QueryError -> m a) -> m a
+  catchQueryError = Catch.catch
 
 instance MonadSession Session where
     sql = sessionSql
     statement = sessionStatement
+
+instance (MonadSession m) => MonadSession (ReaderT r m) where
+    sql bs = lift (sql bs)
+    statement ps s = lift (statement ps s)
+
+instance (MonadSession m) => MonadSession (ExceptT e m) where
+    sql bs = lift (sql bs)
+    statement ps s = lift (statement ps s)
+
+instance (MonadSession m) => MonadSession (StateT s m) where
+    sql bs = lift (sql bs)
+    statement ps s = lift (statement ps s)
 
 -- |
 -- Smart constructor of the Session object
