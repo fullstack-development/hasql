@@ -4,6 +4,7 @@ module Hasql.Session
 
     -- * Execution
     run,
+    runThrow,
 
     -- * Errors
     module Hasql.Private.Errors,

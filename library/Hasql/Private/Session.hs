@@ -38,10 +38,16 @@ session inner =
     inner conn >>= either Catch.throwM pure
 
 -- |
--- Executes a bunch of commands on the provided connection.
+-- Executes a bunch of commands on the provided connection, returns errors in `Left`
 run :: Session a -> Connection.Connection -> IO (Either QueryError a)
-run (Session impl) connection =
-  Catch.try $ runReaderT impl connection
+run session connection =
+  Catch.try $ runThrow session connection
+
+-- |
+-- Executes a bunch of commands on the provided connection, throws errors as exceptions
+runThrow :: Session a -> Connection.Connection -> IO a
+runThrow (Session impl) connection =
+  runReaderT impl connection
 
 sessionSql :: ByteString -> Session ()
 sessionSql sql =
