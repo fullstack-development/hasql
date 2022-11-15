@@ -11,4 +11,5 @@ module Hasql.Session
 where
 
 import Hasql.Private.Errors
+import Hasql.Private.MonadSession
 import Hasql.Private.Session

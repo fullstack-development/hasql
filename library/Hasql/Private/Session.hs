@@ -9,6 +9,7 @@ import qualified Hasql.Private.Encoders as Encoders
 import qualified Hasql.Private.Encoders.Params as Encoders.Params
 import Hasql.Private.Errors
 import qualified Hasql.Private.IO as IO
+import Hasql.Private.MonadSession
 import Hasql.Private.Prelude
 import qualified Hasql.Private.Settings as Settings
 import qualified Hasql.Statement as Statement
@@ -24,41 +25,10 @@ instance MonadError QueryError Session where
   throwError = Catch.throwM
   catchError = Catch.catch
 
--- |
--- Typeclass for monads that support executing PSQL statements
-class (Monad m, Catch.MonadMask m) => MonadSession m where
-  -- |
-  -- Possibly a multi-statement query,
-  -- which however cannot be parameterized or prepared,
-  -- nor can any results of it be collected.
-  sql :: ByteString -> m ()
-  -- |
-  -- Parameters and a specification of a parametric single-statement query to apply them to.
-  statement :: params -> Statement.Statement params result -> m result
-  -- |
-  -- Throw a QueryError in the monad
-  throwQueryError :: QueryError -> m x
-  throwQueryError = Catch.throwM
-  -- |
-  -- Catch and handle a QueryError
-  catchQueryError :: m a -> (QueryError -> m a) -> m a
-  catchQueryError = Catch.catch
-
 instance MonadSession Session where
-    sql = sessionSql
-    statement = sessionStatement
-
-instance (MonadSession m) => MonadSession (ReaderT r m) where
-    sql bs = lift (sql bs)
-    statement ps s = lift (statement ps s)
-
-instance (MonadSession m) => MonadSession (ExceptT e m) where
-    sql bs = lift (sql bs)
-    statement ps s = lift (statement ps s)
-
-instance (MonadSession m) => MonadSession (StateT s m) where
-    sql bs = lift (sql bs)
-    statement ps s = lift (statement ps s)
+  sql = sessionSql
+  statement = sessionStatement
+  askConnection = ask
 
 -- |
 -- Smart constructor of the Session object
